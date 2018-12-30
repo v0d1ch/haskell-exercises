@@ -2,10 +2,12 @@
 {-# LANGUAGE GADTs         #-}
 {-# LANGUAGE TypeFamilies  #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Exercises where
 
 import Data.Kind (Constraint, Type)
-
+import Debug.Trace
 -- | Before we get started, let's talk about the @TypeOperators@ extension. All
 -- this does is allow us to write types whose names are operators, and write
 -- regular names as infix names with the backticks, as we would at the value
@@ -17,43 +19,59 @@ import Data.Kind (Constraint, Type)
 
 {- ONE -}
 
-data Nat = Z | S Nat
+data Nat = Z | S Nat deriving Show
 
 -- | a. Use the @TypeOperators@ extension to rewrite the 'Add' family with the
 -- name '+':
 
+type family (x :: Nat) + (y :: Nat) :: Nat where
+  'Z  + y = y
+  ('S x) + y = 'S (x + y)
+
 -- | b. Write a type family '**' that multiplies two naturals using '(+)'. Which
 -- extension are you being told to enable? Why?
+-- UndecidableInstances
+
+type family (x :: Nat) ** (y :: Nat) :: Nat where
+  'Z ** y  = y
+  ('S x) ** y = y + (x ** y)
 
 data SNat (value :: Nat) where
   SZ :: SNat 'Z
   SS :: SNat n -> SNat ('S n)
 
 -- | c. Write a function to add two 'SNat' values.
+add :: SNat a -> SNat b -> SNat (a + b)
+add SZ x = x
+add (SS x) y = SS (add x y)
 
 
-
+add' :: Nat -> Nat -> Nat
+add' Z x = x
+add' (S x) y = S (add' x y)
 
 
 {- TWO -}
 
 data Vector (count :: Nat) (a :: Type) where
   VNil  :: Vector 'Z a
-  VCons :: a -> Vector n a -> Vector ('S n) a
+  VCons :: Show a => a -> Vector n a -> Vector ('S n) a
 
+deriving instance Show (Vector c a)
 -- | a. Write a function that appends two vectors together. What would the size
 -- of the result be?
 
--- append :: Vector m a -> Vector n a -> Vector ??? a
+append :: Vector m a -> Vector n a -> Vector (m + n) a
+append VNil x = x
+append (VCons a xs) ys = VCons a (append xs ys)
 
 -- | b. Write a 'flatMap' function that takes a @Vector n a@, and a function
 -- @a -> Vector m b@, and produces a list that is the concatenation of these
 -- results. This could end up being a deceptively big job.
 
--- flatMap :: Vector n a -> (a -> Vector m b) -> Vector ??? b
-flatMap = error "Implement me!"
-
-
+flatMap :: Vector n a -> (a -> Vector m b) -> Vector (n ** m) b
+-- flatMap VNil _ = VNil
+flatMap (VCons a as) f = append (f a) (flatMap as f)
 
 
 
@@ -61,11 +79,23 @@ flatMap = error "Implement me!"
 
 -- | a. More boolean fun! Write the type-level @&&@ function for booleans.
 
+type family (a :: Bool) && (b :: Bool) where
+  'True && 'True = 'True
+  _ && _ = 'False
+
 -- | b. Write the type-level @||@ function for booleans.
+
+type family (a :: Bool) || (b :: Bool) where
+  'True || _ = 'True
+  _ || 'True  = 'True
+  _ || _  = 'False
 
 -- | c. Write an 'All' function that returns @'True@ if all the values in a
 -- type-level list of boleans are @'True@.
 
+type family All (a :: [Bool]) :: Bool where
+  All '[] = 'True
+  All (x ': xs) = x && All xs
 
 
 
@@ -75,8 +105,19 @@ flatMap = error "Implement me!"
 -- | a. Nat fun! Write a type-level 'compare' function using the promoted
 -- 'Ordering' type.
 
--- | b. Write a 'Max' family to get the maximum of two natural numbers.
+type family Compare (x :: Nat) (y :: Nat) :: Ordering where
+  Compare  'Z     'Z    = 'EQ
+  Compare  'Z    ('S n) = 'LT
+  Compare ('S n)  'Z    = 'GT
+  Compare ('S x) ('S y) =  Compare x y
 
+-- | b. Write a 'Max' family to get the maximum of two natural numbers.
+type family Max (a :: Nat) (b :: Nat) :: Nat where
+  Max x y = Max' (Compare x y) x y
+
+type family Max' (x :: Ordering) (a :: Nat) (b :: Nat) :: Nat where
+  Max' 'LT _ y = y
+  Max' _ x y = x
 -- | c. Write a family to get the maximum natural in a list.
 
 
@@ -88,6 +129,9 @@ flatMap = error "Implement me!"
 data Tree = Empty | Node Tree Nat Tree
 
 -- | Write a type family to insert a promoted 'Nat' into a promoted 'Tree'.
+type family Insert (x :: Nat) (y :: Tree) :: Tree where
+  Insert _ 'Empty = 'Empty
+  Insert x ('Node l i r) = 'Node l (x + i) r
 
 
 
